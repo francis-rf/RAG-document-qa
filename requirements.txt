@@ -1,0 +1,15 @@
+langchain
+langchain-community
+langchain-openai
+langgraph
+openai
+faiss-cpu
+pydantic
+pydantic-settings
+python-dotenv
+beautifulsoup4
+requests
+gradio
+tavily
+pypdf
+pymupdf
