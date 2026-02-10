@@ -13,8 +13,8 @@ ENV/
 logs/
 *.log
 
-# Vector stores
-vectorstore/
+# Vector stores (data only, not src code)
+/vectorstore/
 *.faiss
 *.pkl
 

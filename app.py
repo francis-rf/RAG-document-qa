@@ -10,13 +10,12 @@ import sys
 from typing import List, Tuple, Optional
 
 # Add src to path
-sys.path.append(str(Path(__file__).parent / "src"))
 
-from document_ingestion.document_processor import DocumentProcessor
-from vectorstore.vectorstore import VectorStore
-from graph_builder.graph_builder import GraphBuilder
-from config.settings import settings
-from utils.logger import get_logger
+from src.document_ingestion.document_processor import DocumentProcessor
+from src.vectorstore.vectorstore import VectorStore
+from src.graph_builder.graph_builder import GraphBuilder
+from src.config.settings import settings
+from src.utils.logger import get_logger
 from langchain_openai import ChatOpenAI
 
 logger = get_logger(__name__)
