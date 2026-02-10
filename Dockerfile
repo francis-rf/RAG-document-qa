@@ -13,8 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the project
 COPY . .
 
-# Expose the port Gradio runs on
-EXPOSE 7860
+# Expose the port for FastAPI + Gradio
+EXPOSE 8000
 
 # Run the application
 CMD ["python", "app.py"]

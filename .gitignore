@@ -5,8 +5,9 @@ __pycache__/
 *.so
 .Python
 venv/
-env/
+env/gi 
 ENV/
+.venv/
 
 # Logs
 logs/

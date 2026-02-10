@@ -13,3 +13,5 @@ gradio
 tavily
 pypdf
 pymupdf
+fastapi
+uvicorn[standard]

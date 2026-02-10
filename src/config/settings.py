@@ -2,11 +2,23 @@
 Configuration settings for the RAG application.
 """
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
+
+# Check if .env file exists
+env_file_path = Path(__file__).parent.parent.parent / ".env"
+if not env_file_path.exists():
+    print("ERROR: .env file not found!")
+    print(f"Expected location: {env_file_path}")
+    print("\nPlease create a .env file with the following variables:")
+    print("  OPENAI_API_KEY=your_openai_api_key_here")
+    print("  TAVILY_API_KEY=your_tavily_api_key_here")
+    print("\nYou can copy .env.example to .env and fill in your API keys.")
+    sys.exit(1)
 
 # Load environment variables
 load_dotenv(override=True)
@@ -58,7 +70,25 @@ class Settings(BaseSettings):
         self.LOGS_DIR.mkdir(exist_ok=True, parents=True)
         self.VECTORSTORE_DIR.mkdir(exist_ok=True, parents=True)
 
+    def validate_api_keys(self):
+        """Validate that required API keys are set."""
+        missing_keys = []
+
+        if not self.OPENAI_API_KEY:
+            missing_keys.append("OPENAI_API_KEY")
+
+        if not self.TAVILY_API_KEY:
+            missing_keys.append("TAVILY_API_KEY")
+
+        if missing_keys:
+            print("\nERROR: Missing required API keys in .env file:")
+            for key in missing_keys:
+                print(f"  - {key}")
+            print("\nPlease add these keys to your .env file.")
+            sys.exit(1)
+
 
 # Global settings instance
 settings = Settings()
 settings.ensure_directories()
+settings.validate_api_keys()

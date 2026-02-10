@@ -8,10 +8,12 @@ A Retrieval Augmented Generation (RAG) system that retrieves answers from user-p
 
 ## 🎯 Features
 
+- **FastAPI + Gradio**: Combined backend API and web UI in single application
 - Persistent vector store - loads and stores document chunks locally (no need to reload every time)
 - Tavily web search fallback for questions outside your documents
 - Real-time chat interface with source citations
 - Automatic document chunking and embedding
+- RESTful API endpoints for external integrations
 
 ## 🔄 How It Works
 
@@ -37,7 +39,7 @@ rag-react-agent/
 │   └── utils/               # Utilities (logging)
 ├── data/                    # PDF documents
 ├── logs/                    # Application logs
-├── app.py                   # Gradio frontend
+├── app.py                   # FastAPI + Gradio (combined backend + frontend)
 ├── requirements.txt         # Python dependencies
 └── README.md
 ```
@@ -86,7 +88,7 @@ cp .env.example .env
 
 ```bash
 docker build -t rag-react-agent .
-docker run -p 7860:7860 --env-file .env rag-react-agent
+docker run -p 8000:8000 --env-file .env rag-react-agent
 ```
 
 ## 💻 Usage
@@ -97,7 +99,12 @@ docker run -p 7860:7860 --env-file .env rag-react-agent
 python app.py
 ```
 
-The application will open in your browser at `http://localhost:7860`
+The application will start on `http://localhost:8000`
+
+**Access Points:**
+- **Web UI (Gradio)**: `http://localhost:8000/`
+- **API Documentation**: `http://localhost:8000/docs`
+- **API Endpoints**: `http://localhost:8000/api/*`
 
 ### Adding Documents
 
@@ -129,6 +136,18 @@ _RAG Search interface showing document-based Q&A_
 
 - "What are the latest developments in AI?"
 - "Explain quantum computing in simple terms"
+
+## 🔌 API Endpoints
+
+**Base URL:** `http://localhost:8000/api`
+
+- **GET** `/api` - Health check endpoint
+- **GET** `/api/files` - List all PDF files in data directory
+- **POST** `/api/load` - Load and index documents
+- **POST** `/api/query` - Query documents with a question
+  - Parameters: `question` (string)
+
+**Interactive API Documentation:** Visit `http://localhost:8000/docs` for Swagger UI with interactive testing.
 
 ## 📄 License
 
