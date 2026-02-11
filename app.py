@@ -7,7 +7,7 @@ from pydantic import BaseModel
 import gradio as gr
 from pathlib import Path
 import sys
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Union, Dict
 
 # Add src to path
 
@@ -185,11 +185,24 @@ def get_file_list():
         return "No PDF files found in data directory."
     return "\n".join([f"- {f.name}" for f in pdf_files])
 
-def chatbot_response(message: str, history: List[Tuple[str, str]]):
+def chatbot_response(message: str, history: Optional[Union[List[Tuple[str, str]], List[Dict]]]):
     try:
+        # Normalize history to messages format: list of {'role':..., 'content':...}
+        history_msgs: List[Dict] = []
+        if history:
+            for item in history:
+                if isinstance(item, (list, tuple)) and len(item) == 2:
+                    user, assistant = item
+                    history_msgs.append({"role": "user", "content": user})
+                    history_msgs.append({"role": "assistant", "content": assistant})
+                elif isinstance(item, dict) and "role" in item and "content" in item:
+                    history_msgs.append(item)
+
         vs = VectorStore()
         if not vs.load():
-             return history + [(message, "⚠️ Please load documents first!")], ""
+            history_msgs.append({"role": "user", "content": message})
+            history_msgs.append({"role": "assistant", "content": "⚠️ Please load documents first!"})
+            return history_msgs, ""
 
         retriever = vs.get_retriever()
 
@@ -209,14 +222,20 @@ def chatbot_response(message: str, history: List[Tuple[str, str]]):
             content_preview = doc.page_content[:300].replace('\n', ' ') + "..."
             docs_display += f"**Source {i}:** {source} (Page {page})\n> {content_preview}\n\n"
 
-        history.append((message, answer))
-        return history, docs_display
+        history_msgs.append({"role": "user", "content": message})
+        history_msgs.append({"role": "assistant", "content": answer})
+
+        return history_msgs, docs_display
 
     except Exception as e:
         logger.error(f"Error in chatbot: {str(e)}")
         error_msg = f"❌ Error: {str(e)}"
-        history.append((message, error_msg))
-        return history, ""
+        try:
+            history_msgs.append({"role": "user", "content": message})
+            history_msgs.append({"role": "assistant", "content": error_msg})
+        except Exception:
+            pass
+        return history_msgs, ""
 
 # Gradio UI
 with gr.Blocks(title="RAG ReAct Agent", theme=gr.themes.Soft()) as demo:
@@ -241,7 +260,7 @@ with gr.Blocks(title="RAG ReAct Agent", theme=gr.themes.Soft()) as demo:
             gr.Markdown(f"**Chunk Config:** `{settings.CHUNK_SIZE}` / `{settings.CHUNK_OVERLAP}`")
 
         with gr.Column(scale=3):
-            chatbot = gr.Chatbot(height=500, label="Chat History")
+            chatbot = gr.Chatbot(height=500, label="Chat History", type="messages")
             msg = gr.Textbox(placeholder="Ask a question about your documents...", label="Your Question")
             with gr.Row():
                 submit_btn = gr.Button("Submit", variant="primary")
