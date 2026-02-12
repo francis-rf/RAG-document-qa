@@ -238,7 +238,7 @@ def chatbot_response(message: str, history: Optional[Union[List[Tuple[str, str]]
         return history_msgs, ""
 
 # Gradio UI
-with gr.Blocks(title="RAG ReAct Agent", theme=gr.themes.Soft()) as demo:
+with gr.Blocks(title="RAG ReAct Agent") as demo:
     gr.Markdown("# 🤖 RAG ReAct Agent")
     gr.Markdown("Ask questions about your documents using AI-powered retrieval.")
 
@@ -260,7 +260,7 @@ with gr.Blocks(title="RAG ReAct Agent", theme=gr.themes.Soft()) as demo:
             gr.Markdown(f"**Chunk Config:** `{settings.CHUNK_SIZE}` / `{settings.CHUNK_OVERLAP}`")
 
         with gr.Column(scale=3):
-            chatbot = gr.Chatbot(height=500, label="Chat History", type="messages")
+            chatbot = gr.Chatbot(height=500, label="Chat History")
             msg = gr.Textbox(placeholder="Ask a question about your documents...", label="Your Question")
             with gr.Row():
                 submit_btn = gr.Button("Submit", variant="primary")

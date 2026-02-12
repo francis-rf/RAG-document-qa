@@ -5,9 +5,10 @@ __pycache__/
 *.so
 .Python
 venv/
-env/gi 
+env/
 ENV/
 .venv/
+uv.lock
 
 # Logs
 logs/
