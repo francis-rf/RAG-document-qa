@@ -1,121 +1,180 @@
 # RAG Document Search
 
-![Python](https://img.shields.io/badge/python-3.12-blue.svg)
+![Python](https://img.shields.io/badge/python-3.12+-blue.svg)
 ![FastAPI](https://img.shields.io/badge/FastAPI-latest-green.svg)
 ![LangChain](https://img.shields.io/badge/LangChain-latest-green.svg)
-![AWS](https://img.shields.io/badge/AWS-ECS%20Fargate-orange.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+[![CI/CD](https://github.com/francis-rf/RAG-document-qa/actions/workflows/deploy.yml/badge.svg)](https://github.com/francis-rf/RAG-document-qa/actions/workflows/deploy.yml)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-AWS%20ECS-orange?logo=amazonaws)](http://rag-alb-1726979633.us-east-1.elb.amazonaws.com/)
 
 A Retrieval Augmented Generation (RAG) system for semantic document search and Q&A over PDF files, powered by a LangGraph ReAct agent.
 
-## Features
+> **Live Demo:** [http://rag-alb-1726979633.us-east-1.elb.amazonaws.com/](http://rag-alb-1726979633.us-east-1.elb.amazonaws.com/)
 
-- Upload and index PDF documents
-- Semantic search using FAISS + OpenAI embeddings
-- LangGraph ReAct agent for intelligent Q&A
-- Tavily web search fallback for questions beyond your documents
-- Source citations with page references
-- Custom HTML/CSS/JS frontend served via FastAPI
-- AWS deployment — S3 for PDFs, Secrets Manager for API keys, ECS Fargate for hosting
+## 🎯 Features
 
-## How It Works
+- **Document Upload**: Upload and index PDF files directly from the browser
+- **Semantic Search**: FAISS vector store with OpenAI `text-embedding-3-small`
+- **ReAct Agent**: LangGraph ReAct agent for intelligent multi-step Q&A
+- **Web Search Fallback**: Tavily search when answers aren't found in documents
+- **Source Citations**: Every answer includes page-level source references
+- **Cloud-Native**: S3 for PDFs, Secrets Manager for API keys, ECS Fargate for hosting
 
-1. PDFs are uploaded and split into chunks
-2. Chunks are embedded using OpenAI `text-embedding-3-small`
-3. Embeddings are stored in a FAISS vector database
-4. User question is embedded and similarity search finds top-k relevant chunks
-5. LangGraph ReAct agent generates an answer using retrieved context
-6. If answer is not found in docs, agent falls back to Tavily web search
+## 🛠️ Tech Stack
 
-## Project Structure
+- **Backend**: FastAPI + Python 3.12
+- **AI**: LangGraph ReAct agent, OpenAI embeddings, FAISS vector store
+- **APIs**: OpenAI, Tavily
+- **Frontend**: Vanilla JavaScript, HTML, CSS
+- **Cloud**: AWS ECR + ECS Fargate + ALB + S3 + Secrets Manager
+- **CI/CD**: GitHub Actions
 
-```
-2.RAG Document Search/
-├── src/
-│   ├── config/              # Settings — AWS Secrets Manager + .env fallback
-│   ├── document_ingestion/  # PDF loading and chunking
-│   ├── vectorstore/         # FAISS vector store management
-│   ├── nodes/               # LangGraph retriever + ReAct agent nodes
-│   ├── graph_builder/       # LangGraph workflow builder
-│   ├── state/               # State schema (TypedDict)
-│   └── utils/               # Logging
-├── static/                  # Frontend (index.html, style.css, script.js)
-├── data/                    # PDF documents (local dev only — S3 on AWS)
-├── vectorstore/             # FAISS index (local dev only)
-├── app.py                   # FastAPI application
-├── requirements.txt
-└── Dockerfile
-```
-
-## Local Development
+## 🚀 Quick Start
 
 ### Prerequisites
 
 - Python 3.12+
-- OpenAI API key
-- Tavily API key
+- API Keys:
+  - OpenAI API key
+  - Tavily API key
 
-### Setup
+### Installation
+
+1. Clone the repository:
 
 ```bash
-# Create virtual environment
-python -m venv venv
-venv\Scripts\activate        # Windows
-source venv/bin/activate     # Linux/Mac
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Create .env file
-cp .env.example .env
-# Add OPENAI_API_KEY and TAVILY_API_KEY to .env
+git clone https://github.com/francis-rf/RAG-document-qa.git
+cd RAG-document-qa
 ```
 
-### Run
+2. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+3. Create `.env` file:
+
+```bash
+cp .env.example .env
+# Edit .env with your API keys
+```
+
+4. Run the application:
 
 ```bash
 uvicorn app:app --reload --port 8000
 ```
 
-Open `http://localhost:8000`
+5. Open browser:
 
-## API Endpoints
+`http://localhost:8000`
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/` | Serves frontend |
-| GET | `/api/files` | List PDFs in data directory |
-| POST | `/api/upload` | Upload a PDF file |
-| POST | `/api/load` | Index documents into vector store |
-| POST | `/api/query` | Query documents with a question |
+## 🐳 Docker Deployment
 
-## Docker
+### Build and Run
 
 ```bash
 docker build -t rag-document-search .
-docker run -p 8000:8000 rag-document-search
+docker run -p 8000:8000 --env-file .env rag-document-search
 ```
 
-> On AWS, API keys are loaded from Secrets Manager automatically. No `.env` needed in the container.
+## ☁️ AWS Deployment
 
-## AWS Deployment
-
-Deployed on **ECS Fargate** with:
+### Services Used
 
 | Service | Purpose |
 |---------|---------|
 | ECR | Container image registry |
 | ECS Fargate | Serverless container hosting |
-| Application Load Balancer | HTTPS traffic routing |
-| S3 (`rag-documents-qa`) | PDF storage |
-| Secrets Manager (`rag_document`) | API keys |
+| Application Load Balancer | HTTP traffic routing |
+| S3 (`rag-documents-qa`) | PDF document storage |
+| Secrets Manager (`rag_document`) | API key storage |
 | CloudWatch | Logs and monitoring |
-| IAM | Roles and permissions |
+| IAM | Task roles and permissions |
+
+### Setup
+
+1. Store API keys in **AWS Secrets Manager** under secret name `rag_document`
+2. Upload PDFs to **S3** bucket `rag-documents-qa`
+3. Push Docker image to **ECR**
+4. Deploy via **ECS Fargate** with an ALB pointing to port 8000
+
+### Live URL
+
+The app is deployed and accessible at:
+
+**[http://rag-alb-1726979633.us-east-1.elb.amazonaws.com/](http://rag-alb-1726979633.us-east-1.elb.amazonaws.com/)**
+
+## ⚙️ GitHub Actions CI/CD
+
+Automated deployment is configured via `.github/workflows/deploy.yml`.
+
+### Workflow: Deploy to AWS ECS
+
+On every push to `main`, the pipeline:
+
+1. **Checks out** the code
+2. **Configures** AWS credentials
+3. **Logs in** to Amazon ECR
+4. **Builds & pushes** the Docker image to ECR (tagged with commit SHA and `latest`)
+5. **Triggers** a force new deployment on ECS
+
+### Required GitHub Secrets
+
+Add the following secrets to your GitHub repository (`Settings > Secrets > Actions`):
+
+| Secret | Description |
+|--------|-------------|
+| `AWS_ACCESS_KEY_ID` | IAM user access key |
+| `AWS_SECRET_ACCESS_KEY` | IAM user secret key |
+
+### Workflow Status
+
+[![Deploy to AWS ECS](https://github.com/francis-rf/RAG-document-qa/actions/workflows/deploy.yml/badge.svg)](https://github.com/francis-rf/RAG-document-qa/actions/workflows/deploy.yml)
+
+## 📁 Project Structure
+
+```
+RAG-document-qa/
+├── app.py                      # FastAPI application
+├── src/
+│   ├── config/                 # Settings — AWS Secrets Manager + .env fallback
+│   ├── document_ingestion/     # PDF loading and chunking
+│   ├── vectorstore/            # FAISS vector store management
+│   ├── nodes/                  # LangGraph retriever + ReAct agent nodes
+│   ├── graph_builder/          # LangGraph workflow builder
+│   ├── state/                  # State schema (TypedDict)
+│   └── utils/                  # Logging
+├── static/                     # Frontend
+│   ├── index.html
+│   ├── script.js
+│   └── style.css
+├── data/                       # PDF documents (local only — S3 on AWS)
+├── vectorstore/                # FAISS index (local only)
+├── .github/workflows/          # CI/CD
+│   └── deploy.yml
+├── Dockerfile
+├── .dockerignore
+└── requirements.txt
+```
+
+## 📡 API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | Serves frontend |
+| GET | `/api` | Health check |
+| GET | `/api/files` | List PDFs (S3 or local) |
+| POST | `/api/upload` | Upload a PDF file |
+| POST | `/api/load` | Index documents into vector store |
+| POST | `/api/query` | Query documents with a question |
 
 ## 📸 Screenshots
 
 ![Application Interface](screenshots/image.png)
 RAG Document Search Interface
 
-## License
+## 📄 License
 
-MIT
+MIT License
