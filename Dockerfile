@@ -1,20 +1,20 @@
-# Use official Python 3.12 image
+# Use official Python 3.12 slim image
 FROM python:3.12-slim
 
-# Set working directory inside the container
+# Set working directory
 WORKDIR /app
 
-# Copy requirements first (so Docker caches this layer)
+# Copy requirements first for layer caching
 COPY requirements.txt .
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the project
+# Copy application code
 COPY . .
 
-# Expose the port for FastAPI + Gradio
+# Expose FastAPI port
 EXPOSE 8000
 
-# Run the application
-CMD ["python", "app.py"]
+# Run with uvicorn
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

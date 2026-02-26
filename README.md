@@ -1,154 +1,121 @@
-# RAG ReAct Agent
+# RAG Document Search
 
-![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
+![Python](https://img.shields.io/badge/python-3.12-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-latest-green.svg)
 ![LangChain](https://img.shields.io/badge/LangChain-latest-green.svg)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![AWS](https://img.shields.io/badge/AWS-ECS%20Fargate-orange.svg)
 
-A Retrieval Augmented Generation (RAG) system that retrieves answers from user-provided PDFs using semantic search and a ReAct agent with Tavily web search for questions beyond the knowledge base.
+A Retrieval Augmented Generation (RAG) system for semantic document search and Q&A over PDF files, powered by a LangGraph ReAct agent.
 
-## 🎯 Features
+## Features
 
-- **FastAPI + Gradio**: Combined backend API and web UI in single application
-- Persistent vector store - loads and stores document chunks locally (no need to reload every time)
-- Tavily web search fallback for questions outside your documents
-- Real-time chat interface with source citations
-- Automatic document chunking and embedding
-- RESTful API endpoints for external integrations
+- Upload and index PDF documents
+- Semantic search using FAISS + OpenAI embeddings
+- LangGraph ReAct agent for intelligent Q&A
+- Tavily web search fallback for questions beyond your documents
+- Source citations with page references
+- Custom HTML/CSS/JS frontend served via FastAPI
+- AWS deployment — S3 for PDFs, Secrets Manager for API keys, ECS Fargate for hosting
 
-## 🔄 How It Works
+## How It Works
 
-1. **Document Loading**: PDFs are loaded and split into chunks
-2. **Embedding**: Text chunks are converted to vector embeddings using OpenAI
-3. **Storage**: Embeddings stored in FAISS vector database for fast retrieval
-4. **Query**: User question is embedded using the same model
-5. **Retrieval**: Similarity search finds top-k relevant chunks from vector store
-6. **Generation**: LLM generates answer using retrieved context
-7. **Fallback**: If answer is not found in docs, ReAct agent searches the web using Tavily
+1. PDFs are uploaded and split into chunks
+2. Chunks are embedded using OpenAI `text-embedding-3-small`
+3. Embeddings are stored in a FAISS vector database
+4. User question is embedded and similarity search finds top-k relevant chunks
+5. LangGraph ReAct agent generates an answer using retrieved context
+6. If answer is not found in docs, agent falls back to Tavily web search
 
-## 📁 Project Structure
+## Project Structure
 
 ```
-rag-react-agent/
+2.RAG Document Search/
 ├── src/
-│   ├── config/              # Configuration settings
-│   ├── document_ingestion/  # Document loading and processing
-│   ├── vectorstore/         # Vector store management
-│   ├── nodes/               # LangGraph nodes (retriever + ReAct agent)
-│   ├── graph_builder/       # Workflow graph builder
-│   ├── state/               # State management
-│   └── utils/               # Utilities (logging)
-├── data/                    # PDF documents
-├── logs/                    # Application logs
-├── app.py                   # FastAPI + Gradio (combined backend + frontend)
-├── requirements.txt         # Python dependencies
-└── README.md
+│   ├── config/              # Settings — AWS Secrets Manager + .env fallback
+│   ├── document_ingestion/  # PDF loading and chunking
+│   ├── vectorstore/         # FAISS vector store management
+│   ├── nodes/               # LangGraph retriever + ReAct agent nodes
+│   ├── graph_builder/       # LangGraph workflow builder
+│   ├── state/               # State schema (TypedDict)
+│   └── utils/               # Logging
+├── static/                  # Frontend (index.html, style.css, script.js)
+├── data/                    # PDF documents (local dev only — S3 on AWS)
+├── vectorstore/             # FAISS index (local dev only)
+├── app.py                   # FastAPI application
+├── requirements.txt
+└── Dockerfile
 ```
 
-## 🚀 Getting Started
+## Local Development
 
 ### Prerequisites
 
-- Python 3.8 or higher
+- Python 3.12+
 - OpenAI API key
 - Tavily API key
 
-### Installation
-
-1. Clone the repository
+### Setup
 
 ```bash
-git clone <your-repo-url>
-cd rag-react-agent
-```
-
-2. Create and activate virtual environment
-
-```bash
+# Create virtual environment
 python -m venv venv
 venv\Scripts\activate        # Windows
 source venv/bin/activate     # Linux/Mac
-```
 
-3. Install dependencies
-
-```bash
+# Install dependencies
 pip install -r requirements.txt
-```
 
-4. Set up environment variables
-
-```bash
+# Create .env file
 cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY and TAVILY_API_KEY
+# Add OPENAI_API_KEY and TAVILY_API_KEY to .env
 ```
 
-## 🐳 Docker Deployment
-
-### Build and Run
+### Run
 
 ```bash
-docker build -t rag-react-agent .
-docker run -p 8000:8000 --env-file .env rag-react-agent
+uvicorn app:app --reload --port 8000
 ```
 
-## 💻 Usage
+Open `http://localhost:8000`
 
-### Running the Application
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | Serves frontend |
+| GET | `/api/files` | List PDFs in data directory |
+| POST | `/api/upload` | Upload a PDF file |
+| POST | `/api/load` | Index documents into vector store |
+| POST | `/api/query` | Query documents with a question |
+
+## Docker
 
 ```bash
-python app.py
+docker build -t rag-document-search .
+docker run -p 8000:8000 rag-document-search
 ```
 
-The application will start on `http://localhost:8000`
+> On AWS, API keys are loaded from Secrets Manager automatically. No `.env` needed in the container.
 
-**Access Points:**
-- **Web UI (Gradio)**: `http://localhost:8000/`
-- **API Documentation**: `http://localhost:8000/docs`
-- **API Endpoints**: `http://localhost:8000/api/*`
+## AWS Deployment
 
-### Adding Documents
+Deployed on **ECS Fargate** with:
 
-1. Place PDF files in the `data/` folder
-2. Click "Load Documents" in the sidebar
-3. Documents will be chunked, embedded, and stored in the vector database
-
-### Asking Questions
-
-- Type your question in the chat interface
-- The system will search your documents first
-- If no relevant answer is found, it will search the web using Tavily
-- View answers with source citations and retrieved document chunks
+| Service | Purpose |
+|---------|---------|
+| ECR | Container image registry |
+| ECS Fargate | Serverless container hosting |
+| Application Load Balancer | HTTPS traffic routing |
+| S3 (`rag-documents-qa`) | PDF storage |
+| Secrets Manager (`rag_document`) | API keys |
+| CloudWatch | Logs and monitoring |
+| IAM | Roles and permissions |
 
 ## 📸 Screenshots
 
 ![Application Interface](screenshots/image.png)
-_RAG Search interface showing document-based Q&A_
+RAG Document Search Interface
 
-## 📊 Example Use Cases
+## License
 
-**Questions about your documents:**
-
-- "What is transfer learning?"
-- "Explain the architecture of transformers"
-- "What are the key differences between supervised and unsupervised learning?"
-
-**Questions beyond your documents (using Tavily web search):**
-
-- "What are the latest developments in AI?"
-- "Explain quantum computing in simple terms"
-
-## 🔌 API Endpoints
-
-**Base URL:** `http://localhost:8000/api`
-
-- **GET** `/api` - Health check endpoint
-- **GET** `/api/files` - List all PDF files in data directory
-- **POST** `/api/load` - Load and index documents
-- **POST** `/api/query` - Query documents with a question
-  - Parameters: `question` (string)
-
-**Interactive API Documentation:** Visit `http://localhost:8000/docs` for Swagger UI with interactive testing.
-
-## 📄 License
-
-This project is licensed under the MIT License
+MIT

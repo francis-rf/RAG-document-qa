@@ -8,13 +8,12 @@ venv/
 env/
 ENV/
 .venv/
-uv.lock
 
 # Logs
 logs/
 *.log
 
-# Vector store
+# Vector store (rebuilt at runtime from S3)
 vectorstore/
 *.faiss
 *.pkl
@@ -33,5 +32,12 @@ vectorstore/
 .DS_Store
 Thumbs.db
 
-# Data (PDFs stored in S3 on AWS)
-data/
+# Git
+.git
+.gitignore
+.dockerignore
+
+# Docs / misc
+README.md
+screenshots/
+*.md

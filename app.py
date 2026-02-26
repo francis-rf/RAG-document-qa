@@ -1,15 +1,15 @@
 """
-Combined FastAPI + Gradio application
+RAG Document Search - FastAPI Application
 """
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-import gradio as gr
 from pathlib import Path
-import sys
-from typing import List, Tuple, Optional, Union, Dict
-
-# Add src to path
+import shutil
+import boto3
+from typing import List, Optional
 
 from src.document_ingestion.document_processor import DocumentProcessor
 from src.vectorstore.vectorstore import VectorStore
@@ -20,7 +20,6 @@ from langchain_openai import ChatOpenAI
 
 logger = get_logger(__name__)
 
-# FastAPI app
 app = FastAPI(title="RAG ReAct Agent API", version="0.1.0")
 
 app.add_middleware(
@@ -51,7 +50,35 @@ class FileListResponse(BaseModel):
 # Global vector store
 vector_store = None
 
-# API Endpoints
+
+# ── S3 Helpers ─────────────────────────────────────────────────
+def get_s3_client():
+    return boto3.client("s3", region_name=settings.AWS_REGION)
+
+def list_s3_pdfs() -> List[str]:
+    """List PDF filenames from S3 bucket."""
+    s3 = get_s3_client()
+    response = s3.list_objects_v2(Bucket=settings.S3_BUCKET)
+    return [
+        Path(obj["Key"]).name
+        for obj in response.get("Contents", [])
+        if obj["Key"].lower().endswith(".pdf")
+    ]
+
+def download_pdfs_from_s3() -> List[str]:
+    """Download all PDFs from S3 to local data dir. Returns list of filenames."""
+    s3 = get_s3_client()
+    response = s3.list_objects_v2(Bucket=settings.S3_BUCKET)
+    keys = [obj["Key"] for obj in response.get("Contents", []) if obj["Key"].lower().endswith(".pdf")]
+    settings.DATA_DIR.mkdir(exist_ok=True, parents=True)
+    for key in keys:
+        local_path = settings.DATA_DIR / Path(key).name
+        s3.download_file(settings.S3_BUCKET, key, str(local_path))
+        logger.info(f"Downloaded {key} from S3")
+    return [Path(k).name for k in keys]
+
+
+# ── API Endpoints ───────────────────────────────────────────────
 @app.get("/api")
 def root():
     return {"status": "ok", "message": "RAG ReAct Agent API is running"}
@@ -59,28 +86,42 @@ def root():
 @app.get("/api/files", response_model=FileListResponse)
 def get_files_api():
     try:
-        data_dir = settings.DATA_DIR
-        pdf_files = list(set(list(data_dir.glob("*.pdf")) + list(data_dir.glob("*.PDF"))))
-        file_names = [f.name for f in pdf_files]
-        return FileListResponse(files=file_names)
+        if settings.S3_BUCKET:
+            return FileListResponse(files=list_s3_pdfs())
+        else:
+            data_dir = settings.DATA_DIR
+            pdf_files = list(set(list(data_dir.glob("*.pdf")) + list(data_dir.glob("*.PDF"))))
+            return FileListResponse(files=[f.name for f in pdf_files])
     except Exception as e:
         logger.error(f"Error getting file list: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...)):
+    try:
+        if not file.filename.lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+        dest = settings.DATA_DIR / file.filename
+        with open(dest, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        return {"status": "success", "filename": file.filename}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading file: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/load", response_model=LoadResponse)
 def load_documents_api():
     global vector_store
-
     try:
-        vs = VectorStore()
-
-        if vs.exists():
-            if vs.load():
-                vector_store = vs
-                return LoadResponse(
-                    status="success",
-                    message=f"Loaded existing vector store from disk ({vs.persist_directory})"
-                )
+        # On AWS — download PDFs from S3 first
+        if settings.S3_BUCKET:
+            logger.info(f"Downloading PDFs from S3 bucket: {settings.S3_BUCKET}")
+            downloaded = download_pdfs_from_s3()
+            if not downloaded:
+                return LoadResponse(status="error", message="No PDF files found in S3 bucket")
+            logger.info(f"Downloaded {len(downloaded)} file(s) from S3")
 
         processor = DocumentProcessor(
             chunk_size=settings.CHUNK_SIZE,
@@ -91,18 +132,16 @@ def load_documents_api():
         docs = processor.load_documents([settings.DATA_DIR])
 
         if not docs:
-            return LoadResponse(
-                status="error",
-                message="No documents found in the data directory"
-            )
+            return LoadResponse(status="error", message="No documents found")
 
         chunks = processor.split_documents(docs)
+        vs = VectorStore()
         vs.create_retriever(chunks, save=True)
         vector_store = vs
 
         return LoadResponse(
             status="success",
-            message="Successfully loaded and indexed documents",
+            message=f"Indexed {len(docs)} document(s) into {len(chunks)} chunks",
             chunks_count=len(chunks),
             docs_count=len(docs)
         )
@@ -114,7 +153,6 @@ def load_documents_api():
 @app.post("/api/query", response_model=QueryResponse)
 def query_documents_api(request: QueryRequest):
     global vector_store
-
     try:
         if vector_store is None:
             vs = VectorStore()
@@ -123,7 +161,6 @@ def query_documents_api(request: QueryRequest):
             vector_store = vs
 
         retriever = vector_store.get_retriever()
-
         llm = ChatOpenAI(model=settings.OPENAI_MODEL, temperature=0)
         graph_builder = GraphBuilder(retriever=retriever, llm=llm)
 
@@ -149,144 +186,12 @@ def query_documents_api(request: QueryRequest):
         logger.error(f"Error in query: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Gradio UI Functions
-def load_documents_action():
-    try:
-        vs = VectorStore()
+# Serve static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-        if vs.exists():
-            if vs.load():
-                return f"✅ Loaded existing vector store from disk ({vs.persist_directory})"
-
-        processor = DocumentProcessor(
-            chunk_size=settings.CHUNK_SIZE,
-            chunk_overlap=settings.CHUNK_OVERLAP,
-            extract_images=True
-        )
-
-        docs = processor.load_documents([settings.DATA_DIR])
-
-        if not docs:
-            return "❌ No documents found in the data directory!"
-
-        chunks = processor.split_documents(docs)
-        vs.create_retriever(chunks, save=True)
-
-        return f"✅ Successfully loaded and indexed {len(chunks)} chunks from {len(docs)} documents."
-
-    except Exception as e:
-        logger.error(f"Error loading documents: {str(e)}")
-        return f"❌ Error loading documents: {str(e)}"
-
-def get_file_list():
-    data_dir = settings.DATA_DIR
-    pdf_files = list(set(list(data_dir.glob("*.pdf")) + list(data_dir.glob("*.PDF"))))
-    if not pdf_files:
-        return "No PDF files found in data directory."
-    return "\n".join([f"- {f.name}" for f in pdf_files])
-
-def chatbot_response(message: str, history: Optional[Union[List[Tuple[str, str]], List[Dict]]]):
-    try:
-        # Normalize history to messages format: list of {'role':..., 'content':...}
-        history_msgs: List[Dict] = []
-        if history:
-            for item in history:
-                if isinstance(item, (list, tuple)) and len(item) == 2:
-                    user, assistant = item
-                    history_msgs.append({"role": "user", "content": user})
-                    history_msgs.append({"role": "assistant", "content": assistant})
-                elif isinstance(item, dict) and "role" in item and "content" in item:
-                    history_msgs.append(item)
-
-        vs = VectorStore()
-        if not vs.load():
-            history_msgs.append({"role": "user", "content": message})
-            history_msgs.append({"role": "assistant", "content": "⚠️ Please load documents first!"})
-            return history_msgs, ""
-
-        retriever = vs.get_retriever()
-
-        llm = ChatOpenAI(model=settings.OPENAI_MODEL, temperature=0)
-        graph_builder = GraphBuilder(retriever=retriever, llm=llm)
-
-        result = graph_builder.run(message)
-
-        answer = result.get("answer", "No answer generated.")
-        retrieved_docs = result.get("retrieved_docs", [])
-
-        docs_display = ""
-        for i, doc in enumerate(retrieved_docs[:5], 1):
-            meta = doc.metadata if hasattr(doc, 'metadata') else {}
-            source = Path(meta.get('source', 'Unknown')).name
-            page = meta.get('page', 'N/A')
-            content_preview = doc.page_content[:300].replace('\n', ' ') + "..."
-            docs_display += f"**Source {i}:** {source} (Page {page})\n> {content_preview}\n\n"
-
-        history_msgs.append({"role": "user", "content": message})
-        history_msgs.append({"role": "assistant", "content": answer})
-
-        return history_msgs, docs_display
-
-    except Exception as e:
-        logger.error(f"Error in chatbot: {str(e)}")
-        error_msg = f"❌ Error: {str(e)}"
-        try:
-            history_msgs.append({"role": "user", "content": message})
-            history_msgs.append({"role": "assistant", "content": error_msg})
-        except Exception:
-            pass
-        return history_msgs, ""
-
-# Gradio UI
-with gr.Blocks(title="RAG ReAct Agent") as demo:
-    gr.Markdown("# 🤖 RAG ReAct Agent")
-    gr.Markdown("Ask questions about your documents using AI-powered retrieval.")
-
-    with gr.Row():
-        with gr.Column(scale=1, variant="panel"):
-            gr.Markdown("## ⚙️ Settings")
-
-            gr.Markdown("### 📁 Documents")
-            file_list_display = gr.Markdown(value=get_file_list())
-            refresh_files_btn = gr.Button("🔄 Refresh File List", size="sm")
-
-            gr.Markdown("### Actions")
-            load_btn = gr.Button("📂 Load Documents", variant="primary")
-
-            status_output = gr.Textbox(label="Status", interactive=False, lines=3)
-
-            gr.Markdown("### 🤖 Model Info")
-            gr.Markdown(f"**Model:** `{settings.OPENAI_MODEL}`")
-            gr.Markdown(f"**Chunk Config:** `{settings.CHUNK_SIZE}` / `{settings.CHUNK_OVERLAP}`")
-
-        with gr.Column(scale=3):
-            chatbot = gr.Chatbot(height=500, label="Chat History")
-            msg = gr.Textbox(placeholder="Ask a question about your documents...", label="Your Question")
-            with gr.Row():
-                submit_btn = gr.Button("Submit", variant="primary")
-                clear_btn = gr.Button("Clear Chat")
-
-            with gr.Accordion("📄 Retrieved Context", open=False):
-                context_display = gr.Markdown("No context retrieved yet.")
-
-    refresh_files_btn.click(fn=get_file_list, outputs=file_list_display)
-    load_btn.click(fn=load_documents_action, outputs=status_output)
-    submit_btn.click(
-        fn=chatbot_response,
-        inputs=[msg, chatbot],
-        outputs=[chatbot, context_display]
-    ).then(fn=lambda: "", outputs=msg)
-
-    msg.submit(
-        fn=chatbot_response,
-        inputs=[msg, chatbot],
-        outputs=[chatbot, context_display]
-    ).then(fn=lambda: "", outputs=msg)
-
-    clear_btn.click(lambda: ([], ""), outputs=[chatbot, context_display])
-
-# Mount Gradio app
-app = gr.mount_gradio_app(app, demo, path="/")
+@app.get("/")
+def serve_frontend():
+    return FileResponse("static/index.html")
 
 if __name__ == "__main__":
     import uvicorn
